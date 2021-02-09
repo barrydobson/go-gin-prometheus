@@ -120,10 +120,50 @@ type PrometheusPushGateway struct {
 	Job string
 }
 
-// NewPrometheus generates a new set of metrics with a certain subsystem name
-func NewPrometheus(subsystem string, expandedParams []string, customMetricsList ...*Metric) *Prometheus {
+// Options to initialise prometheus
+type Options func(*configOptions)
 
-	metricsList := customMetricsList
+type configOptions struct {
+	subsystem      string
+	expandedParams []string
+	customMetrics  []*Metric
+}
+
+// Subsytstem name
+func Subsystem(subsystem string) Options {
+	return func(o *configOptions) {
+		o.subsystem = subsystem
+	}
+}
+
+// ExpandedParams for url path
+func ExpandedParams(params []string) Options {
+	return func(o *configOptions) {
+		o.expandedParams = params
+	}
+}
+
+// CustomMetrics to register
+func CustomMetics(metrics []*Metric) Options {
+	return func(o *configOptions) {
+		o.customMetrics = metrics
+	}
+}
+
+// NewPrometheus generates a new set of metrics with a certain subsystem name
+func NewPrometheus(options ...Options) *Prometheus {
+
+	opts := &configOptions{
+		subsystem:      "gin",
+		expandedParams: []string{},
+		customMetrics:  []*Metric{},
+	}
+
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	metricsList := opts.customMetrics
 
 	for _, metric := range standardMetrics {
 		metricsList = append(metricsList, metric)
@@ -135,7 +175,7 @@ func NewPrometheus(subsystem string, expandedParams []string, customMetricsList 
 		ReqCntURLLabelMappingFn: func(c *gin.Context) string {
 			url := c.Request.URL.EscapedPath() // i.e. by default do nothing, i.e. return URL as is
 			for _, p := range c.Params {
-				if contains(expandedParams, p.Key) {
+				if contains(opts.expandedParams, p.Key) {
 					continue
 				}
 
@@ -148,7 +188,7 @@ func NewPrometheus(subsystem string, expandedParams []string, customMetricsList 
 		},
 	}
 
-	p.registerMetrics(subsystem)
+	p.registerMetrics(opts.subsystem)
 
 	return p
 }
