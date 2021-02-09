@@ -15,6 +15,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var defaultMetricPath = "/metrics"
+
 // Standard default metrics
 //	counter, counter_vec, gauge, gauge_vec,
 //	histogram, histogram_vec, summary, summary_vec
@@ -94,6 +96,7 @@ type Prometheus struct {
 	Ppg           PrometheusPushGateway
 
 	MetricsList []*Metric
+	MetricsPath string
 
 	ReqCntURLLabelMappingFn RequestCounterURLLabelMappingFn
 	URLLabelFromContext     string
@@ -128,6 +131,7 @@ func NewPrometheus(subsystem string, expandedParams []string, customMetricsList 
 
 	p := &Prometheus{
 		MetricsList: metricsList,
+		MetricsPath: defaultMetricPath,
 		ReqCntURLLabelMappingFn: func(c *gin.Context) string {
 			url := c.Request.URL.EscapedPath() // i.e. by default do nothing, i.e. return URL as is
 			for _, p := range c.Params {
@@ -190,23 +194,25 @@ func (p *Prometheus) SetListenAddressWithRouter(listenAddress string, r *gin.Eng
 	}
 }
 
-func (p *Prometheus) setMetricsPath(e *gin.Engine, metricsPath string) {
+// SetMetricsPath set metrics paths
+func (p *Prometheus) SetMetricsPath(e *gin.Engine) {
 
 	if p.listenAddress != "" {
-		p.router.GET(metricsPath, prometheusHandler())
+		p.router.GET(p.MetricsPath, prometheusHandler())
 		p.runServer()
 	} else {
-		e.GET(metricsPath, prometheusHandler())
+		e.GET(p.MetricsPath, prometheusHandler())
 	}
 }
 
-func (p *Prometheus) setMetricsPathWithAuth(e *gin.Engine, accounts gin.Accounts, metricsPath string) {
+// SetMetricsPathWithAuth set metrics paths with authentication
+func (p *Prometheus) SetMetricsPathWithAuth(e *gin.Engine, accounts gin.Accounts) {
 
 	if p.listenAddress != "" {
-		p.router.GET(metricsPath, gin.BasicAuth(accounts), prometheusHandler())
+		p.router.GET(p.MetricsPath, gin.BasicAuth(accounts), prometheusHandler())
 		p.runServer()
 	} else {
-		e.GET(metricsPath, gin.BasicAuth(accounts), prometheusHandler())
+		e.GET(p.MetricsPath, gin.BasicAuth(accounts), prometheusHandler())
 	}
 
 }
@@ -365,28 +371,21 @@ func (p *Prometheus) registerMetrics(subsystem string) {
 }
 
 // Use adds the middleware to a gin engine.
-func (p *Prometheus) Use(e *gin.Engine, metricsPath string) {
-	e.Use(p.handlerFunc(metricsPath))
-	p.setMetricsPath(e, metricsPath)
-}
-
-func (p *Prometheus) UseWithCustomMetrics(e *gin.Engine, gatherer prometheus.Gatherers, metricsPath string) {
-	p.setMetricsPathWithCustomMetrics(e, gatherer, metricsPath)
-}
-
-func (p *Prometheus) setMetricsPathWithCustomMetrics(e *gin.Engine, gatherer prometheus.Gatherers, metricsPath string) {
-	p.router.GET(metricsPath, prometheusHandlerFor(gatherer))
+func (p *Prometheus) Use(e *gin.Engine) {
+	e.Use(p.HandlerFunc())
+	p.SetMetricsPath(e)
 }
 
 // UseWithAuth adds the middleware to a gin engine with BasicAuth.
-func (p *Prometheus) UseWithAuth(e *gin.Engine, accounts gin.Accounts, metricsPath string) {
-	e.Use(p.HandlerFunc(metricsPath))
-	p.setMetricsPathWithAuth(e, accounts, metricsPath)
+func (p *Prometheus) UseWithAuth(e *gin.Engine, accounts gin.Accounts) {
+	e.Use(p.HandlerFunc())
+	p.SetMetricsPathWithAuth(e, accounts)
 }
 
-func (p *Prometheus) HandlerFunc(metricsPath string) gin.HandlerFunc {
+// HandlerFunc defines handler function for middleware
+func (p *Prometheus) HandlerFunc() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.URL.String() == metricsPath {
+		if c.Request.URL.Path == p.MetricsPath {
 			c.Next()
 			return
 		}
