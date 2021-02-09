@@ -400,7 +400,7 @@ func (p *Prometheus) registerMetrics(subsystem string) {
 		case reqCnt:
 			p.reqCnt = metric.(*prometheus.CounterVec)
 		case reqDur:
-			p.reqDur = metric.(prometheus.HistogramVec)
+			p.reqDur = metric.(*prometheus.HistogramVec)
 		case resSz:
 			p.resSz = metric.(prometheus.Summary)
 		case reqSz:
